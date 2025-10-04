@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { ArrowLeft, Copy, Phone, PhoneOff, Cake, Users, MessageCircle } from 'lucide-react'
+import { ArrowLeft, Copy, Phone, PhoneOff, Cake, Users, MessageCircle, Mic, MicOff, Video, VideoOff } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast-simple'
 import CakeCut from '@/components/CakeCut'
 import { io, Socket } from 'socket.io-client'
@@ -43,6 +43,8 @@ export default function PartyRoomPage({ params }: PartyRoomProps) {
   const [videoCallActive, setVideoCallActive] = useState(false)
   const [showCakeCut, setShowCakeCut] = useState(false)
   const [socket, setSocket] = useState<Socket | null>(null)
+  const [isMuted, setIsMuted] = useState(false)
+  const [isVideoOff, setIsVideoOff] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const localVideoRef = useRef<HTMLVideoElement>(null)
@@ -171,6 +173,17 @@ export default function PartyRoomPage({ params }: PartyRoomProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Effect to handle video stream assignment
+  useEffect(() => {
+    if (localStream && localVideoRef.current) {
+      localVideoRef.current.srcObject = localStream
+      localVideoRef.current.play().catch(err => {
+        console.error('Error auto-playing video:', err)
+      })
+      console.log('Stream assigned via useEffect:', localStream)
+    }
+  }, [localStream])
+
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault()
     if (!newMessage.trim() || !socket) return
@@ -203,8 +216,15 @@ export default function PartyRoomPage({ params }: PartyRoomProps) {
       setLocalStream(stream)
       setVideoCallActive(true)
       
+      // Assign stream to video element
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream
+        localVideoRef.current.play().catch(err => {
+          console.error('Error playing local video:', err)
+        })
+        console.log('Local stream assigned to video element:', stream)
+      } else {
+        console.error('Local video ref not available')
       }
 
       // Create offers for all existing users
@@ -215,6 +235,7 @@ export default function PartyRoomPage({ params }: PartyRoomProps) {
       })
 
     } catch (error) {
+      console.error('Error accessing media devices:', error)
       toast({
         title: "Camera access denied",
         description: "Please allow camera and microphone access to join video calls.",
@@ -229,6 +250,8 @@ export default function PartyRoomPage({ params }: PartyRoomProps) {
     }
     setRemoteStreams(new Map())
     setVideoCallActive(false)
+    setIsMuted(false)
+    setIsVideoOff(false)
     
     peerConnections.forEach(pc => pc.close())
     setPeerConnections(new Map())
@@ -265,9 +288,29 @@ export default function PartyRoomPage({ params }: PartyRoomProps) {
 
   const cutCake = () => {
     if (socket) {
-      socket.emit('cut-cake &', roomCode)
+      socket.emit('cut-cake', roomCode)
     }
     setShowCakeCut(true)
+  }
+
+  const toggleMicrophone = () => {
+    if (localStream) {
+      const audioTrack = localStream.getAudioTracks()[0]
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled
+        setIsMuted(!audioTrack.enabled)
+      }
+    }
+  }
+
+  const toggleVideo = () => {
+    if (localStream) {
+      const videoTrack = localStream.getVideoTracks()[0] 
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled
+        setIsVideoOff(!videoTrack.enabled)
+      }
+    }
   }
 
   return (
@@ -306,6 +349,12 @@ export default function PartyRoomPage({ params }: PartyRoomProps) {
               <Users className="inline-block mr-1 h-4 w-4" />
               {users.length}
             </span>
+            {videoCallActive && (
+              <div className="flex items-center gap-1 text-white text-sm">
+                {isMuted && <MicOff className="h-4 w-4 text-red-400" />}
+                {isVideoOff && <VideoOff className="h-4 w-4 text-red-400" />}
+              </div>
+            )}
             {isHost && (
               <Button
                 size="sm"
@@ -392,20 +441,36 @@ export default function PartyRoomPage({ params }: PartyRoomProps) {
                     {!videoCallActive ? (
                       <Button
                         onClick={joinVideoCall}
-                        className="bg-green-600 hover:bg-green-700"
+                    className="bg-green-600 hover:bg-green-700"
                       >
                         <Phone className="mr-2 h-4 w-4" />
                         Join Call
                       </Button>
                     ) : (
-                      <Button
-                        onClick={leaveVideoCall}
-                        variant="destructive"
-                        className="bg-red-600 hover:bg-red-700"
-                      >
-                        <PhoneOff className="mr-2 h-4 w-4" />
-                        Leave Call
-                      </Button>
+                      <>
+                        <Button
+                          onClick={toggleMicrophone}
+                          className={isMuted ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"}
+                        >
+                          {isMuted ? <MicOff className="mr-2 h-4 w-4" /> : <Mic className="mr-2 h-4 w-4" />}
+                          {isMuted ? "Unmute" : "Mute"}
+                        </Button>
+                        <Button
+                          onClick={toggleVideo}
+                          className={isVideoOff ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"}
+                        >
+                          {isVideoOff ? <VideoOff className="mr-2 h-4 w-4" /> : <Video className="mr-2 h-4 w-4" />}
+                          {isVideoOff ? "Video On" : "Video Off"}
+                        </Button>
+                        <Button
+                          onClick={leaveVideoCall}
+                          variant="destructive"
+                          className="bg-red-600 hover:bg-red-700"
+                        >
+                          <PhoneOff className="mr-2 h-4 w-4" />
+                          Leave Call
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -419,16 +484,54 @@ export default function PartyRoomPage({ params }: PartyRoomProps) {
                 ) : (
                   <div className="h-full grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Local Video */}
-                    <div className="relative">
+                    <div className="relative group">
                       <video
                         ref={localVideoRef}
                         autoPlay
                         muted
                         playsInline
-                        className="w-full h-64 bg-gray-200 rounded-lg"
+                        controls={false}
+                        className={`w-full h-64 bg-gray-200 rounded-lg object-cover ${isVideoOff ? 'hidden' : ''}`}
                       />
+                      {isVideoOff && (
+                        <div className="w-full h-64 bg-gray-800 rounded-lg flex items-center justify-center">
+                          <div className="text-center text-white">
+                            <VideoOff className="mx-auto h-12 w-12 mb-2" />
+                            <p className="text-sm">Camera Off</p>
+                          </div>
+                        </div>
+                      )}
+                      {!localStream && !isVideoOff && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-gray-200 rounded-lg">
+                          <div className="text-center text-gray-600">
+                            <MessageCircle className="mx-auto h-8 w-8 mb-2" />
+                            <p className="text-sm">Starting camera...</p>
+                          </div>
+                        </div>
+                      )}
                       <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded text-sm">
                         You ({userName})
+                        {isMuted && <MicOff className="ml-1 h-3 w-3 inline" />}
+                      </div>
+                      
+                      {/* Floating Control Buttons */}
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            onClick={toggleMicrophone}
+                            className={isMuted ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"}
+                          >
+                            {isMuted ? <MicOff className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={toggleVideo}
+                            className={isVideoOff ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"}
+                          >
+                            {isVideoOff ? <VideoOff className="h-3 w-3" /> : <Video className="h-3 w-3" />}
+                          </Button>
+                        </div>
                       </div>
                     </div>
 
@@ -440,10 +543,14 @@ export default function PartyRoomPage({ params }: PartyRoomProps) {
                           <video
                             autoPlay
                             playsInline
+                            controls={false}
                             ref={(video) => {
-                              if (video) video.srcObject = stream
+                              if (video) {
+                                video.srcObject = stream
+                                video.play().catch(console.error)
+                              }
                             }}
-                            className="w-full h-64 bg-gray-200 rounded-lg"
+                            className="w-full h-64 bg-gray-200 rounded-lg object-cover"
                           />
                           <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded text-sm">
                             {user?.name || 'Unknown'}
