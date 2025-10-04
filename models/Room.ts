@@ -38,6 +38,4 @@ const RoomSchema = new Schema<IRoom>({
   partyState: { type: PartyStateSchema, default: () => ({}) }
 })
 
-RoomSchema.index({ code: 1 }, { unique: true })
-
 export default mongoose.models.Room || mongoose.model<IRoom>('Room', RoomSchema)

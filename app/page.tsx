@@ -37,7 +37,7 @@ export default function HomePage() {
         {/* Enhanced Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-6 justify-center mb-20">
           <Link href="/create" className="group">
-            <Button size="lg" className="bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 text-white font-bold text-xl px-12 py-8 rounded-2xl shadow-2xl hover:shadow-yellow-500/25 transform hover:scale-105 transition-all duration-300 border-0 animate-pulse">
+            <Button size="lg" className="bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 text-white font-bold text-xl px-12 py-8 rounded-2xl shadow-2xl hover:shadow-yellow-500/25 transform hover:scale-105 transition-all duration-300 border-0">
             <PartyPopper className="mr-3 h-8 w-8 animate-bounce" />
               Host a Party
             </Button>
