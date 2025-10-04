@@ -1,0 +1,5 @@
+# Create a .env.local file with these variables:
+MONGODB_URI=mongodb+srv://your-username:your-password@your-cluster.mongodb.net/the-den?retryWrites=true&w=majority
+NEXTAUTH_URL=http://localhost:3000  
+NEXTAUTH_SECRET=your-secret-key-here
+NEXT_PUBLIC_SOCKET_URL=http://localhost:3000
