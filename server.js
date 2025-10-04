@@ -1,7 +1,14 @@
+// Load environment variables FIRST
+require('dotenv').config({ path: '.env.local' })
+
 const { createServer } = require('http')
 const { parse } = require('url')
 const next = require('next')
 const { Server } = require('socket.io')
+
+console.log('🔧 Loading environment variables...')
+console.log('🗄️ MONGODB_URI:', process.env.MONGODB_URI ? '✅ Set' : '❌ Missing')
+console.log('🔌 SOCKET_SERVER_URL:', process.env.SOCKET_SERVER_URL ? '✅ Set' : '❌ Missing')
 
 const dev = process.env.NODE_ENV !== 'production'
 const hostname = 'localhost'

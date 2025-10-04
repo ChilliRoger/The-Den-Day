@@ -43,8 +43,10 @@ export async function GET(request: NextRequest, { params }: RoomParams) {
 
   } catch (error) {
     console.error('Error fetching room:', error)
+    console.error('Error details:', error instanceof Error ? error.message : error)
+    console.error('Room code requested:', code)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }

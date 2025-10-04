@@ -5,15 +5,20 @@ import { generateRoomCode } from '@/lib/webrtc'
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('🏠 Creating new room...')
     const { host } = await request.json()
+    console.log('👤 Host name:', host)
     
     if (!host || typeof host !== 'string' || host.trim().length === 0) {
+      console.log('❌ Host name validation failed')
       return NextResponse.json(
         { error: 'Host name is required' },
         { status: 400 }
       )
     }
 
+    console.log('🗄️ Connecting to database...')
+    require('dotenv').config({ path: '.env.local' })
     await connectDB()
 
     let roomCode: string
@@ -21,24 +26,30 @@ export async function POST(request: NextRequest) {
     const maxAttempts = 10
 
     // Generate unique room code
+    console.log('🎲 Generating unique room code...')
     do {
       roomCode = generateRoomCode()
+      console.log('🔍 Checking room code:', roomCode)
       const existingRoom = await Room.findOne({ code: roomCode })
       
       if (!existingRoom) {
+        console.log('✅ Room code is unique:', roomCode)
         break
       }
       
       attempt++
       if (attempt >= maxAttempts) {
+        console.error('❌ Failed to generate unique room code after', maxAttempts, 'attempts')
         return NextResponse.json(
           { error: 'Unable to generate unique room code. Please try again.' },
           { status: 500 }
         )
       }
+      console.log('🔄 Room code taken, trying again. Attempt:', attempt)
     } while (true)
 
     // Create new room
+    console.log('🏗️ Creating new room object...')
     const newRoom = new Room({
       code: roomCode,
       host: host.trim(),
@@ -49,7 +60,9 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    console.log('💾 Saving room to database...')
     await newRoom.save()
+    console.log('✅ Room saved successfully with ID:', newRoom._id)
 
     return NextResponse.json({
       success: true,
@@ -59,8 +72,9 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Error creating room:', error)
+    console.error('Error details:', error instanceof Error ? error.message : error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }
