@@ -194,12 +194,19 @@ export default function PartyRoomPage({ params }: PartyRoomProps) {
     const hostInfo = JSON.parse(sessionStorage.getItem('hostInfo') || 'null')
     const guestInfo = JSON.parse(sessionStorage.getItem('guestInfo') || 'null')
     
+    let currentUserName = ''
+    let currentIsHost = false
+    
     if (hostInfo && hostInfo.roomCode === roomCode) {
-      setUserName(hostInfo.name)
-      setIsHost(true)
+      currentUserName = hostInfo.name
+      currentIsHost = true
+      setUserName(currentUserName)
+      setIsHost(currentIsHost)
     } else if (guestInfo && guestInfo.roomCode === roomCode) {
-      setUserName(guestInfo.name)
-      setIsHost(false)
+      currentUserName = guestInfo.name
+      currentIsHost = false
+      setUserName(currentUserName)
+      setIsHost(currentIsHost)
     } else {
       toast({
         title: "Access denied",
@@ -209,10 +216,12 @@ export default function PartyRoomPage({ params }: PartyRoomProps) {
       return
     }
 
+    console.log('🔑 User authentication successful:', { currentUserName, currentIsHost, roomCode })
+
     // Initialize Socket.io
     const socketInstance = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000')
     
-    socketInstance.emit('join-room', roomCode, userName)
+    socketInstance.emit('join-room', roomCode, currentUserName)
     
     socketInstance.on('user-joined', (user: User) => {
       setUsers(prev => {

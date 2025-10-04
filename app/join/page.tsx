@@ -54,45 +54,76 @@ export default function JoinPartyPage() {
     setIsLoading(true)
 
     try {
+      console.log('🔍 Attempting to join room:', roomCode.toUpperCase())
       const response = await fetch(`/api/rooms/${roomCode.toUpperCase()}`, {
         method: 'GET',
       })
 
+      console.log('📡 Response status:', response.status)
+      console.log('📡 Response ok:', response.ok)
+
       if (!response.ok) {
         if (response.status === 404) {
+          console.log('❌ Room not found - 404 error')
           toast({
             title: "🚫 Party Not Found",
             description: `Room "${roomCode.toUpperCase()}" doesn't exist. Please check the code with your host and try again!`,
           })
           return
         }
+        console.log('❌ Response not ok, status:', response.status)
         throw new Error('Failed to validate room')
       }
 
-      const roomData = await response.json()
+      const responseData = await response.json()
+      console.log('✅ Room data received:', responseData)
+      
+      // Extract the actual room object from the nested response
+      const roomData = responseData.room || responseData
       
       // Verify room data exists
       if (!roomData || !roomData.code) {
+        console.log('❌ Room data validation failed:', { responseData, roomData, hasCode: !!roomData?.code })
         toast({
           title: "🚫 Invalid Party",
           description: "This party room appears to be corrupted. Please try a different code.",
         })
         return
       }
+      
+      console.log('✅ Room data validation passed. Room code:', roomData.code)
 
       // Store guest info in sessionStorage
-      sessionStorage.setItem('guestInfo', JSON.stringify({ 
-        name: guestName.trim(), 
-        roomCode: roomCode.toUpperCase()
-      }))
+      console.log('💾 Setting sessionStorage...')
+      try {
+        sessionStorage.setItem('guestInfo', JSON.stringify({ 
+          name: guestName.trim(), 
+          roomCode: roomData.code.toUpperCase()
+        }))
+        console.log('✅ SessionStorage set successfully')
+      } catch (sessionError) {
+        console.error('❌ SessionStorage error:', sessionError)
+      }
       
+      console.log('🎉 Showing toast notification...')
       toast({
         title: "🎉 Welcome to the Party!",
-        description: `Successfully joined "${roomCode.toUpperCase()}" as ${guestName.trim()}`,
+        description: `Successfully joined "${roomData.code.toUpperCase()}" as ${guestName.trim()}`,
+        type: "success"
       })
 
-      // Redirect to the party room
-      router.push(`/room/${roomCode.toUpperCase()}`)
+      console.log('🎉 Joining successful! Redirecting to:', `/room/${roomData.code.toUpperCase()}`)
+      
+      // Small delay to ensure toast shows
+      setTimeout(() => {
+        console.log('🚀 Executing router.push to:', `/room/${roomData.code.toUpperCase()}`)
+        try {
+          router.push(`/room/${roomData.code.toUpperCase()}`)
+          console.log('✅ Router.push called successfully')
+        } catch (routerError) {
+          console.error('❌ Router.push error:', routerError)
+        }
+      }, 1000)
     } catch (error) {
       console.error('Error joining party:', error)
       
