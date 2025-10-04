@@ -13,13 +13,18 @@ export default function JoinPartyPage() {
   const [roomCode, setRoomCode] = useState('')
   const [guestName, setGuestName] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [validationError, setValidationError] = useState<string | null>(null)
   const router = useRouter()
   const { toast } = useToast()
 
   const handleJoinParty = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Clear previous validation errors
+    setValidationError(null)
+
     if (!roomCode.trim() || !guestName.trim()) {
+      setValidationError("Both room code and name are required")
       toast({
         title: "Required fields missing",
         description: "Please enter both the room code and your name.",
@@ -28,9 +33,20 @@ export default function JoinPartyPage() {
     }
 
     if (roomCode.trim().length !== 6) {
+      setValidationError("Room code must be exactly 6 characters")
       toast({
         title: "Invalid room code",
         description: "Room code must be exactly 6 characters.",
+      })
+      return
+    }
+
+    // Validate room code format
+    if (!/^[A-Z0-9]{6}$/.test(roomCode.toUpperCase())) {
+      setValidationError("Room code must contain only letters and numbers")
+      toast({
+        title: "Invalid room code format",
+        description: "Room code must contain only letters and numbers.",
       })
       return
     }
@@ -44,13 +60,26 @@ export default function JoinPartyPage() {
 
       if (!response.ok) {
         if (response.status === 404) {
-          throw new Error('Room not found')
+          toast({
+            title: "🚫 Party Not Found",
+            description: `Room "${roomCode.toUpperCase()}" doesn't exist. Please check the code with your host and try again!`,
+          })
+          return
         }
         throw new Error('Failed to validate room')
       }
 
       const roomData = await response.json()
       
+      // Verify room data exists
+      if (!roomData || !roomData.code) {
+        toast({
+          title: "🚫 Invalid Party",
+          description: "This party room appears to be corrupted. Please try a different code.",
+        })
+        return
+      }
+
       // Store guest info in sessionStorage
       sessionStorage.setItem('guestInfo', JSON.stringify({ 
         name: guestName.trim(), 
@@ -58,8 +87,8 @@ export default function JoinPartyPage() {
       }))
       
       toast({
-        title: "Welcome to the party! 🎉",
-        description: `Joining ${roomCode.toUpperCase()} as ${guestName}`,
+        title: "🎉 Welcome to the Party!",
+        description: `Successfully joined "${roomCode.toUpperCase()}" as ${guestName.trim()}`,
       })
 
       // Redirect to the party room
@@ -67,13 +96,9 @@ export default function JoinPartyPage() {
     } catch (error) {
       console.error('Error joining party:', error)
       
-      const errorMessage = (error instanceof Error && error.message === 'Room not found') 
-        ? 'This room code does not exist. Please check the code and try again.'
-        : 'Something went wrong. Please try again.'
-        
       toast({
-        title: "Could not join party",
-        description: errorMessage,
+        title: "❌ Connection Error",
+        description: "Unable to connect to the party. Please check your internet connection and try again.",
       })
     } finally {
       setIsLoading(false)
@@ -120,13 +145,31 @@ export default function JoinPartyPage() {
                     type="text"
                     placeholder="ABCD12"
                     value={roomCode}
-                    onChange={(e) => setRoomCode(e.target.value.replace(/[^A-Z0-9]/gi, '').substring(0, 6).toUpperCase())}
-                    className="w-full text-center text-lg tracking-widest font-mono"
+                    onChange={(e) => {
+                      setRoomCode(e.target.value.replace(/[^A-Z0-9]/gi, '').substring(0, 6).toUpperCase())
+                      setValidationError(null) // Clear error when typing
+                    }}
+                    className={`w-full text-center text-lg tracking-widest font-mono ${
+                      validationError && roomCode.length > 0 
+                        ? 'border-red-500 focus:border-red-500' 
+                        : roomCode.length === 6 
+                          ? 'border-green-500 focus:border-green-500' 
+                          : ''
+                    }`}
                     maxLength={6}
                   />
-                  <p className="text-xs text-gray-500 text-center">
-                    Enter exactly 6 characters (letters and numbers)
-                  </p>
+                  {validationError ? (
+                    <p className="text-xs text-red-500 text-center">
+                      {validationError}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500 text-center">
+                      Enter exactly 6 characters (letters and numbers)
+                      {roomCode.length === 6 && (
+                        <span className="text-green-600 ml-2">✓ Valid format</span>
+                      )}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -171,6 +214,17 @@ export default function JoinPartyPage() {
                   <li>• The code contains only letters and numbers</li>
                   <li>• Make sure to enter your name so others know who you are</li>
                   <li>• You&apos;ll join the party room once validated</li>
+                </ul>
+              </div>
+
+              {/* Common Issues */}
+              <div className="mt-4 p-4 bg-orange-50 rounded-lg">
+                <h3 className="font-semibold text-orange-800 mb-2">🐍 Problem joining?</h3>
+                <ul className="text-sm text-orange-700 space-y-1">
+                  <li>• <strong>Room not found:</strong> Double-check the code with party host</li>
+                  <li>• <strong>Typos:</strong> Ensure no spaces or special characters</li>
+                  <li>• <strong>Wrong letters:</strong> Try mixing uppercase/lowercase</li>
+                  <li>• <strong>Party ended:</strong> Room may have expired or been closed</li>
                 </ul>
               </div>
             </CardContent>

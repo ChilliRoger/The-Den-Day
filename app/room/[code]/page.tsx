@@ -12,6 +12,144 @@ import { useToast } from '@/hooks/use-toast-simple'
 import CakeCut from '@/components/CakeCut'
 import { io, Socket } from 'socket.io-client'
 
+// Dynamic Video Grid Component
+function DynamicVideoGrid({ 
+  localVideoRef, 
+  localStream, 
+  userName, 
+  isVideoOff, 
+  isMuted, 
+  toggleMicrophone, 
+  toggleVideo, 
+  remoteStreams, 
+  users 
+}: {
+  localVideoRef: React.RefObject<HTMLVideoElement>
+  localStream: MediaStream | null
+  userName: string
+  isVideoOff: boolean
+  isMuted: boolean
+  toggleMicrophone: () => void
+  toggleVideo: () => void
+  remoteStreams: Map<string, MediaStream>
+  users: User[]
+}) {
+  // Calculate total video participants (local + remote)
+  const totalParticipants = 1 + remoteStreams.size
+  
+  // Calculate optimal grid layout based on number of participants
+  const getGridLayout = (count: number) => {
+    if (count === 1) return 'grid-cols-1'
+    if (count === 2) return 'grid-cols-1 sm:grid-cols-2'
+    if (count === 3) return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+    if (count === 4) return 'grid-cols-1 sm:grid-cols-2'
+    if (count <= 6) return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3'
+    if (count <= 9) return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3'
+    return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'
+  }
+
+  // Calculate video height based on layout
+  const getVideoHeight = (count: number) => {
+    if (count === 1) return 'h-64 sm:h-80' // Single video gets more space
+    if (count === 2) return 'h-56 sm:h-64' // Two videos side by side
+    if (count === 3) return 'h-48 sm:h-56' // Three videos in row
+    if (count === 4) return 'h-44 sm:h-52' // 2x2 grid
+    return 'h-40 sm:h-48' // Smaller for many participants
+  }
+
+  const gridLayout = getGridLayout(totalParticipants)
+  const videoHeight = getVideoHeight(totalParticipants)
+
+  return (
+    <div className={`h-full w-full`}>
+      <div className={`grid ${gridLayout} gap-3 h-full`}>
+        {/* Local Video */}
+        <div className={`relative group ${videoHeight}`}>
+          <video
+            ref={localVideoRef}
+            autoPlay
+            muted
+            playsInline
+            controls={false}
+            className={`w-full ${videoHeight} bg-gray-200 rounded-lg object-cover ${isVideoOff ? 'hidden' : ''}`}
+          />
+          {isVideoOff && (
+            <div className={`w-full ${videoHeight} bg-gray-800 rounded-lg flex items-center justify-center`}>
+              <div className="text-center text-white">
+                <VideoOff className={`mx-auto mb-2 ${totalParticipants > 1 ? 'h-8 w-8' : 'h-12 w-12'}`} />
+                <p className={`${totalParticipants > 1 ? 'text-xs' : 'text-sm'}`}>Camera Off</p>
+              </div>
+            </div>
+          )}
+          {!localStream && !isVideoOff && (
+            <div className={`absolute inset-0 flex items-center justify-center bg-gray-200 rounded-lg ${videoHeight}`}>
+              <div className="text-center text-gray-600">
+                <MessageCircle className={`mx-auto mb-2 ${totalParticipants > 1 ? 'h-6 w-6' : 'h-8 w-8'}`} />
+                <p className={`${totalParticipants > 1 ? 'text-xs' : 'text-sm'}`}>Starting camera...</p>
+              </div>
+            </div>
+          )}
+          <div className={`absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded text-sm ${totalParticipants > 4 ? 'text-xs px-1 py-0.5' : ''}`}>
+            You ({userName})
+            {isMuted && <MicOff className={`ml-1 inline ${totalParticipants > 4 ? 'h-2 w-2' : 'h-3 w-3'}`} />}
+          </div>
+          
+          {/* Floating Control Buttons - only show for larger videos */}
+          {totalParticipants <= 2 && (
+            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <div className="flex gap-1">
+                <Button
+                  size={totalParticipants === 1 ? "sm" : "sm"}
+                  onClick={toggleMicrophone}
+                  className={isMuted ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"}
+                >
+                  {isMuted ? <MicOff className={totalParticipants === 1 ? "h-4 w-4" : "h-3 w-3"} /> : <Mic className={totalParticipants === 1 ? "h-4 w-4" : "h-3 w-3"} />}
+                </Button>
+                <Button
+                  size={totalParticipants === 1 ? "sm" : "sm"}
+                  onClick={toggleVideo}
+                  className={isVideoOff ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"}
+                >
+                  {isVideoOff ? <VideoOff className={totalParticipants === 1 ? "h-4 w-4" : "h-3 w-3"} /> : <Video className={totalParticipants === 1 ? "h-4 w-4" : "h-3 w-3"} />}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Remote Videos */}
+        {Array.from(remoteStreams.entries()).map(([userId, stream]) => {
+          const user = users.find(u => u.id === userId)
+          return (
+            <div key={userId} className={`relative ${videoHeight}`}>
+              <video
+                autoPlay
+                playsInline
+                controls={false}
+                ref={(video) => {
+                  if (video) {
+                    video.srcObject = stream
+                    video.play().catch(console.error)
+                  }
+                }}
+                className={`w-full ${videoHeight} bg-gray-200 rounded-lg object-cover`}
+              />
+              <div className={`absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded text-sm ${totalParticipants > 4 ? 'text-xs px-1 py-0.5' : ''}`}>
+                {user?.name || 'Guest'}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      
+      {/* Video count indicator */}
+      <div className="mt-2 text-center text-sm text-gray-600">
+        {totalParticipants} participant{totalParticipants !== 1 ? 's' : ''} in call
+      </div>
+    </div>
+  )
+}
+
 interface Message {
   user: string
   text: string
@@ -383,27 +521,53 @@ export default function PartyRoomPage({ params }: PartyRoomProps) {
 
           {/* Chat Tab */}
           <TabsContent value="chat" className="mt-4">
-            <Card className="bg-white/90 backdrop-blur-sm h-[500px] flex flex-column">
+            <Card className="bg-white/90 backdrop-blur-sm h-[500px] flex flex-col shadow-xl border-0">
               {/* Chat Messages */}
-              <CardContent className="flex-1 overflow-y-auto p-4 space-y-3">
+              <CardContent className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-purple-300">
                 {messages.length === 0 ? (
-                  <div className="text-center text-gray-500 mt-8">
-                    <MessageCircle className="mx-auto h-12 w-12 mb-2" />
-                    <p>No messages yet. Start the celebration!</p>
+                  <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                    <div className="bg-gradient-to-r from-purple-400 to-pink-400 p-4 rounded-full mb-4">
+                      <MessageCircle className="h-12 w-12 text-white" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-2">Start the celebration! 🎉</h3>
+                    <p className="text-center text-sm">Be the first to send a message and get the party started!</p>
                   </div>
                 ) : (
                   messages.map((message, index) => (
-                    <div key={index} className={`flex ${message.user === userName ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                        message.user === userName 
-                          ? 'bg-purple-600 text-white' 
-                          : 'bg-gray-200 text-gray-800'
-                      }`}>
-                        <p className="font-semibold text-sm">{message.user}</p>
-                        <p>{message.text}</p>
-                        <p className="text-xs opacity-70 mt-1">
-                          {new Date(message.timestamp).toLocaleTimeString()}
-                        </p>
+                    <div key={index} className={`flex ${message.user === userName ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 duration-300`}>
+                      <div className={`flex items-start gap-3 max-w-xs lg:max-w-md ${message.user === userName ? 'flex-row-reverse' : 'flex-row'}`}>
+                        {/* Avatar */}
+                        <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                          message.user === userName 
+                            ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' 
+                            : 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white'
+                        }`}>
+                          {message.user.charAt(0).toUpperCase()}
+                        </div>
+                        
+                        {/* Message Bubble */}
+                        <div className={`relative px-4 py-3 rounded-2xl shadow-sm ${
+                          message.user === userName 
+                            ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-br-sm' 
+                            : 'bg-white text-gray-800 border border-gray-200 rounded-bl-sm'
+                        }`}>
+                          {/* Sender name for others' messages */}
+                          {message.user !== userName && (
+                            <p className="font-semibold text-sm mb-1 text-purple-600">{message.user}</p>
+                          )}
+                          
+                          {/* Message text */}
+                          <p className={`text-sm leading-relaxed ${message.user === userName ? 'text-white' : 'text-gray-800'}`}>
+                            {message.text}
+                          </p>
+                          
+                          {/* Timestamp */}
+                          <div className={`flex ${message.user === userName ? 'justify-end' : 'justify-start'} mt-1`}>
+                            <p className={`text-xs ${message.user === userName ? 'text-purple-100' : 'text-gray-500'}`}>
+                              {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))
@@ -412,16 +576,26 @@ export default function PartyRoomPage({ params }: PartyRoomProps) {
               </CardContent>
 
               {/* Message Input */}
-              <div className="border-t p-4">
-                <form onSubmit={handleSendMessage} className="flex gap-2">
-                  <Input
-                    placeholder="Type your message..."
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    className="flex-1"
-                  />
-                  <Button type="submit" disabled={!newMessage.trim()}>
-                    Send
+              <div className="border-t border-gray-200 bg-gray-50/50 p-4">
+                <form onSubmit={handleSendMessage} className="flex gap-3">
+                  <div className="flex-1 relative">
+                    <Input
+                      placeholder="Type your message..."
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      className="bg-white border-gray-200 rounded-full px-4 py-3 pr-12 focus:border-purple-300 focus:ring-purple-200 shadow-sm"
+                    />
+                    {/* Emoji button */}
+                    <button type="button" className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-purple-500 transition-colors">
+                      <span className="text-lg">😊</span>
+                    </button>
+                  </div>
+                  <Button 
+                    type="submit" 
+                    disabled={!newMessage.trim()}
+                    className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-full px-6 shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <MessageCircle className="h-4 w-4" />
                   </Button>
                 </form>
               </div>
@@ -482,83 +656,17 @@ export default function PartyRoomPage({ params }: PartyRoomProps) {
                     <p className="text-gray-600">Click &quot;Join Call&quot; to start or join the video call</p>
                   </div>
                 ) : (
-                  <div className="h-full grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Local Video */}
-                    <div className="relative group">
-                      <video
-                        ref={localVideoRef}
-                        autoPlay
-                        muted
-                        playsInline
-                        controls={false}
-                        className={`w-full h-64 bg-gray-200 rounded-lg object-cover ${isVideoOff ? 'hidden' : ''}`}
-                      />
-                      {isVideoOff && (
-                        <div className="w-full h-64 bg-gray-800 rounded-lg flex items-center justify-center">
-                          <div className="text-center text-white">
-                            <VideoOff className="mx-auto h-12 w-12 mb-2" />
-                            <p className="text-sm">Camera Off</p>
-                          </div>
-                        </div>
-                      )}
-                      {!localStream && !isVideoOff && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-gray-200 rounded-lg">
-                          <div className="text-center text-gray-600">
-                            <MessageCircle className="mx-auto h-8 w-8 mb-2" />
-                            <p className="text-sm">Starting camera...</p>
-                          </div>
-                        </div>
-                      )}
-                      <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded text-sm">
-                        You ({userName})
-                        {isMuted && <MicOff className="ml-1 h-3 w-3 inline" />}
-                      </div>
-                      
-                      {/* Floating Control Buttons */}
-                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                        <div className="flex gap-1">
-                          <Button
-                            size="sm"
-                            onClick={toggleMicrophone}
-                            className={isMuted ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"}
-                          >
-                            {isMuted ? <MicOff className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={toggleVideo}
-                            className={isVideoOff ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"}
-                          >
-                            {isVideoOff ? <VideoOff className="h-3 w-3" /> : <Video className="h-3 w-3" />}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Remote Videos */}
-                    {Array.from(remoteStreams.entries()).map(([userId, stream]) => {
-                      const user = users.find(u => u.id === userId)
-                      return (
-                        <div key={userId} className="relative">
-                          <video
-                            autoPlay
-                            playsInline
-                            controls={false}
-                            ref={(video) => {
-                              if (video) {
-                                video.srcObject = stream
-                                video.play().catch(console.error)
-                              }
-                            }}
-                            className="w-full h-64 bg-gray-200 rounded-lg object-cover"
-                          />
-                          <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded text-sm">
-                            {user?.name || 'Unknown'}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
+                  <DynamicVideoGrid 
+                    localVideoRef={localVideoRef}
+                    localStream={localStream}
+                    userName={userName}
+                    isVideoOff={isVideoOff}
+                    isMuted={isMuted}
+                    toggleMicrophone={toggleMicrophone}
+                    toggleVideo={toggleVideo}
+                    remoteStreams={remoteStreams}
+                    users={users}
+                  />
                 )}
               </CardContent>
             </Card>
@@ -567,22 +675,33 @@ export default function PartyRoomPage({ params }: PartyRoomProps) {
 
         {/* Connected Users */}
         {users.length > 0 && (
-          <Card className="mt-4 bg-white/90 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="text-sm text-gray-700">Connected Users</CardTitle>
+          <Card className="mt-4 bg-white/90 backdrop-blur-sm shadow-lg border-0">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm text-gray-700 flex items-center gap-2">
+                <Users className="h-4 w-4 text-purple-500" />
+                Party Attendees ({users.length})
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
+            <CardContent className="pt-0">
+              <div className="flex flex-wrap gap-3">
                 {users.map((user) => (
-                  <div key={user.id} className="flex items-center gap-2 bg-purple-100 px-3 py-1 rounded-full">
-                    <Avatar className="h-6 w-6">
-                      <AvatarFallback text-sm>
-                        {user.name.charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="text-sm font-medium">
+                  <div key={user.id} className={`flex items-center gap-2 px-4 py-2 rounded-full shadow-sm transition-all duration-200 hover:scale-105 ${
+                    user.isHost 
+                      ? 'bg-gradient-to-r from-yellow-100 to-orange-100 border border-yellow-200' 
+                      : 'bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-100'
+                  }`}>
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                      user.isHost 
+                        ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white' 
+                        : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
+                    }`}>
+                      {user.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-sm font-medium text-gray-700">
                       {user.name}
-                      {user.isHost && <span className="text-yellow-600 ml-1">👑</span>}
+                      {user.isHost && (
+                        <span className="text-yellow-600 ml-1 text-sm">👑</span>
+                      )}
                     </span>
                   </div>
                 ))}
